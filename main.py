@@ -7,7 +7,7 @@ from capture_video import capture_video
 from detect_vehicle import detect_vehicle
 from extract_number_plate import extract_number_plate
 from estimate_speed import estimate_speed
-from detect_color import detect_color  # Optional
+from detect_color import detect_color
 
 def main():
     # Initialize the video capture
