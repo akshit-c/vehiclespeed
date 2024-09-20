@@ -1,43 +1,53 @@
 import cv2
-import pytesseract
 import numpy as np
-
-# Import the functions from each step
-from capture_video import capture_video
-from detect_vehicle import detect_vehicle
-from extract_number_plate import extract_number_plate
-from estimate_speed import estimate_speed
-from detect_color import detect_color
+from vehicle_detection import detect_vehicles
+from number_plate_recognition import recognize_number_plate
+from speed_estimation import estimate_speed
+from color_detection import detect_color
 
 def main():
-    # Initialize the video capture
-    cap = cv2.VideoCapture('/Users/amit/Downloads/2034115-hd_1920_1080_30fps.mp4')
+    video_path = '/Users/amit/Downloads/h1.mp4'
+    
+    # Estimate overall speed
+    avg_speed = estimate_speed(video_path)
+    if avg_speed is not None:
+        print(f"Average speed: {avg_speed:.2f} pixels per second")
+    else:
+        print("Failed to estimate overall speed")
 
+    # Process video frame by frame
+    cap = cv2.VideoCapture(video_path)
+    
     while True:
-        # Capture and process video input
-        frame = capture_video(cap)
+        ret, frame = cap.read()
+        if not ret:
+            break
 
-        # Apply vehicle detection model
-        detections = detect_vehicle(frame)
+        # Detect vehicles
+        vehicles = detect_vehicles(frame)
 
-        # Extract number plate and recognize characters
-        number_plate = extract_number_plate(detections)
+        for vehicle in vehicles:
+            print(f"Vehicle shape: {vehicle.shape if vehicle is not None else 'None'}")
+            print(f"Vehicle type: {type(vehicle)}")
+            
+            if vehicle is None or vehicle.size == 0:
+                print("Error: Vehicle image is empty or None")
+                return
+            
+            # Extract number plate
+            number_plate = recognize_number_plate(vehicle)
 
-        # Estimate vehicle speed
-        speed = estimate_speed(frame)
+            # Detect color
+            color = detect_color(vehicle)
 
-        # Detect vehicle color (optional)
-        color = detect_color(frame) if detect_color else None
+            # Display results
+            cv2.imshow('Vehicle', vehicle)
+            if number_plate:
+                print(f'Number Plate: {number_plate}, Color: {color}')
 
-        # Display the results
-        cv2.imshow('Video', frame)
-        print(f"Number Plate: {number_plate}, Speed: {speed:.2f} km/h, Color: {color}")
-
-        # Exit on key press
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
-    # Release resources
     cap.release()
     cv2.destroyAllWindows()
 
