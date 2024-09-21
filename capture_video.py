@@ -1,16 +1,18 @@
 import cv2
-from vehicle_detection import detect_vehicles
+import logging
 
-def process_video_stream():
-    cap = cv2.VideoCapture('/Users/amit/Downloads/Traffic IP Camera video.mp4')# For live webcam input, replace with file path for video
+def capture_frames(video_path):
+    logging.info(f"Attempting to capture frames from {video_path}")
+    cap = cv2.VideoCapture(video_path)
+    frames = []
+    if not cap.isOpened():
+        logging.error(f"Error: Unable to open video file {video_path}")
+        return frames
     while True:
         ret, frame = cap.read()
         if not ret:
             break
-        # Process each frame
-        detect_vehicles(frame)
-        cv2.imshow('Frame', frame)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
+        frames.append(frame)
     cap.release()
-    cv2.destroyAllWindows()
+    logging.info(f"Captured {len(frames)} frames from {video_path}")
+    return frames

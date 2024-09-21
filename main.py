@@ -6,6 +6,7 @@ import ssl
 from number_plate_recognition import recognize_number_plate
 from speed_estimation import estimate_speed, draw_speed_info, calibrate_speed_estimation
 from color_detection import detect_color
+import sys
 
 ssl._create_default_https_context = ssl._create_unverified_context
 
@@ -19,9 +20,8 @@ def process_video_realtime(input_path):
 
     frame_number = 0
 
-    # Define region of interest for speed estimation
-    roi_start = int(frame_height * 0.5)  # Start from middle of the frame
-    roi_end = int(frame_height * 0.8)    # End at 80% of the frame height
+    roi_start = int(frame_height * 0.5)
+    roi_end = int(frame_height * 0.8)
     roi_points = [(0, roi_start), (frame_width, roi_end)]
 
     ret, first_frame = cap.read()
@@ -32,6 +32,9 @@ def process_video_realtime(input_path):
 
     trackers = []
 
+    cv2.namedWindow('Vehicle Detection', cv2.WINDOW_NORMAL)
+    cv2.resizeWindow('Vehicle Detection', 1280, 720)
+
     while cap.isOpened():
         start_time = time.time()
         ret, frame = cap.read()
@@ -39,10 +42,8 @@ def process_video_realtime(input_path):
             break
 
         vehicles = detect_vehicles(frame)
-
         speeds, trackers = estimate_speed(frame, vehicles, frame_number, roi_points)
 
-        # Draw ROI lines
         cv2.line(frame, (0, roi_start), (frame_width, roi_start), (0, 255, 0), 2)
         cv2.line(frame, (0, roi_end), (frame_width, roi_end), (0, 255, 0), 2)
 
@@ -86,5 +87,8 @@ def get_class_name(class_id):
     return class_names.get(class_id, 'Unknown')
 
 if __name__ == '__main__':
-    input_video_path = '/Users/amit/Downloads/Traffic IP Camera video.mp4'
-    process_video_realtime(input_video_path)
+    if len(sys.argv) > 1:
+        input_video_path = sys.argv[1]
+        process_video_realtime(input_video_path)
+    else:
+        print("No input video path provided")

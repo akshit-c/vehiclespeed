@@ -1,49 +1,74 @@
 import cv2
 import numpy as np
 from sklearn.cluster import KMeans
+import logging
 
-def rgb_to_name(rgb):
-    # Define color ranges and names
-    color_ranges = {
-        'Red': ([0, 0, 100], [80, 80, 255]),
-        'Green': ([0, 100, 0], [80, 255, 80]),
-        'Blue': ([100, 0, 0], [255, 80, 80]),
-        'Yellow': ([0, 100, 100], [80, 255, 255]),
-        'Orange': ([0, 60, 100], [80, 150, 255]),
-        'Purple': ([80, 0, 80], [255, 80, 255]),
-        'Pink': ([180, 0, 180], [255, 100, 255]),
-        'Brown': ([0, 0, 0], [100, 100, 100]),
-        'White': ([200, 200, 200], [255, 255, 255]),
-        'Black': ([0, 0, 0], [50, 50, 50]),
-        'Gray': ([80, 80, 80], [200, 200, 200])
-    }
+def rgb_to_hsv(rgb):
+    return cv2.cvtColor(np.uint8([[rgb]]), cv2.COLOR_RGB2HSV)[0][0]
 
-    for color_name, (lower, upper) in color_ranges.items():
-        if all(lower[i] <= rgb[i] <= upper[i] for i in range(3)):
-            return color_name
-    return 'Unknown'
+def hsv_to_name(hsv):
+    h, s, v = hsv
+    s = s * 100 / 255  
+    v = v * 100 / 255  
 
-def detect_color(image):
-    # Resize image to speed up processing
-    small_image = cv2.resize(image, (100, 100))
+    if s <= 15 and v >= 85:
+        return 'White'
+    elif v <= 25:
+        return 'Black'
+    elif s <= 15 and 25 < v < 85:
+        return 'Gray'
+    elif h <= 10 or h > 350:
+        return 'Red'
+    elif 10 < h <= 30:
+        return 'Orange'
+    elif 30 < h <= 70:
+        return 'Yellow'
+    elif 70 < h <= 165:
+        return 'Green'
+    elif 165 < h <= 260:
+        return 'Blue'
+    elif 260 < h <= 315:
+        return 'Purple'
+    elif 315 < h <= 350:
+        return 'Pink'
+    else:
+        return 'Unknown'
+
+def detect_color(frame, roi=None):
+    logging.info("Detecting color in frame")
     
-    # Convert to RGB color space
-    rgb = cv2.cvtColor(small_image, cv2.COLOR_BGR2RGB)
+    if roi:
+        x, y, w, h = roi
+        frame = frame[y:y+h, x:x+w]
     
-    # Reshape the image to be a list of pixels
-    pixels = rgb.reshape((-1, 3))
+    # Convert frame to HSV (Hue, Saturation, Value)
+    hsv_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
     
-    # Perform K-means clustering to find the most dominant color
-    kmeans = KMeans(n_clusters=1, n_init=10)
+    # Reshape the frame to be a list of pixels
+    pixels = hsv_frame.reshape((-1, 3))
+    
+    # Perform K-means clustering to find the most dominant colors
+    kmeans = KMeans(n_clusters=5, n_init=10)
     kmeans.fit(pixels)
     
-    # Get the RGB values of the cluster center (dominant color)
-    dominant_color = kmeans.cluster_centers_[0].astype(int)
+    # Get the HSV values of the dominant colors
+    dominant_colors = kmeans.cluster_centers_
     
-    # Get the name of the dominant color
-    color_name = rgb_to_name(dominant_color)
+    # Get the percentage of each color
+    labels = kmeans.labels_
+    color_percentages = np.bincount(labels) / len(labels)
     
-    print(f"Dominant RGB: {dominant_color}")
-    print(f"Dominant color: {color_name}")
+    # Sort colors by percentage in descending order
+    sorted_colors = sorted(zip(dominant_colors, color_percentages), key=lambda x: x[1], reverse=True)
     
-    return color_name
+    # Convert the dominant colors to names and filter out 'Unknown'
+    color_names = [hsv_to_name(color) for color, _ in sorted_colors if hsv_to_name(color) != 'Unknown']
+    
+    # Return the most dominant color
+    dominant_color = color_names[0] if color_names else 'Unknown'
+    
+    logging.info(f"Detected color: {dominant_color}")
+    return dominant_color
+
+def detect_colors(frame, roi=None):
+    return detect_color(frame, roi)

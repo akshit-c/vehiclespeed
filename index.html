@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vehicle Detection App</title>
+    <link href="https://fonts.googleapis.com/css2?family=Abel&family=Montserrat+Subrayada:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body, html {
+            height: 150%;
+            margin: 0;
+            font-family: 'Abel', sans-serif;
+            overflow: hidden;
+        }
+        .video-background {
+            position: fixed;
+            right: 0;
+            bottom: 0;
+            min-width: 100%;
+            min-height: 100%;
+            width: auto;
+            height: auto;
+            z-index: -1;
+            object-fit: cover;
+        }
+        .content {
+            position: relative;
+            height: 100vh;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .container {
+            background: rgba(178, 178, 178, 0.754);
+            padding: 2rem;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            max-width: 80%;
+            width: 600px;
+            margin-top: 20px;
+        }
+        h1 {
+            font-size: 4rem;
+            color: #ffffff;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+            margin-bottom: 2rem;
+            text-align: center;
+            font-family: 'Abel', sans-serif;
+        }
+        .upload-btn-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+        }
+        .upload-btn-wrapper input[type=file] {
+            font-size: 100px;
+            position: absolute;
+            left: 0;
+            top: 0;
+            opacity: 0;
+            cursor: pointer;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+        }
+        button {
+            position: relative;
+            display: inline-block;
+            cursor: pointer;
+            outline: none;
+            border: 0;
+            vertical-align: middle;
+            text-decoration: none;
+            background: transparent;
+            padding: 0;
+            font-size: inherit;
+            font-family: inherit;
+        }
+        button.learn-more {
+            width: 12rem;
+            height: auto;
+            position: relative;
+            z-index: 1;
+        }
+        button.learn-more .circle {
+            transition: all 0.45s cubic-bezier(0.65, 0, 0.076, 1);
+            position: relative;
+            display: block;
+            margin: 0;
+            width: 3rem;
+            height: 3rem;
+            background: #282936;
+            border-radius: 1.625rem;
+        }
+        button.learn-more .circle .icon {
+            transition: all 0.45s cubic-bezier(0.65, 0, 0.076, 1);
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            margin: auto;
+            background: #fff;
+        }
+        button.learn-more .circle .icon.arrow {
+            transition: all 0.45s cubic-bezier(0.65, 0, 0.076, 1);
+            left: 0.625rem;
+            width: 1.125rem;
+            height: 0.125rem;
+            background: none;
+        }
+        button.learn-more .circle .icon.arrow::before {
+            position: absolute;
+            content: "";
+            top: -0.29rem;
+            right: 0.0625rem;
+            width: 0.625rem;
+            height: 0.625rem;
+            border-top: 0.125rem solid #fff;
+            border-right: 0.125rem solid #fff;
+            transform: rotate(45deg);
+        }
+        button.learn-more .button-text {
+            transition: all 0.45s cubic-bezier(0.65, 0, 0.076, 1);
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            padding: 0.75rem 0;
+            margin: 0 0 0 1.85rem;
+            color: #282936;
+            font-weight: 700;
+            line-height: 1.6;
+            text-align: center;
+            text-transform: uppercase;
+        }
+        button:hover .circle {
+            width: 100%;
+        }
+        button:hover .circle .icon.arrow {
+            background: #fff;
+            transform: translate(1rem, 0);
+        }
+        button:hover .button-text {
+            color: #fff;
+        }
+        .upload-btn-wrapper:hover .circle {
+            width: 100%;
+        }
+        .upload-btn-wrapper:hover .circle .icon.arrow {
+            background: #fff;
+            transform: translate(1rem, 0);
+        }
+        .upload-btn-wrapper:hover .button-text {
+            color: #fff;
+        }
+        .upload-btn-wrapper:hover button {
+            box-shadow: inset 0px 0px 25px #1479EA;
+        }
+        #results {
+            margin-top: 20px;
+            text-align: left;
+            max-height: 400px;
+            overflow-y: auto;
+            background-color: rgba(255, 255, 255, 0.9);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .vehicle-info {
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        .vehicle-info p {
+            margin: 5px 0;
+        }
+        #error {
+            color: red;
+            margin-top: 20px;
+            text-align: left;
+            background-color: rgba(255, 200, 200, 0.9);
+            padding: 10px;
+            border-radius: 5px;
+            display: none;
+        }
+        #videoContainer {
+            display: none;
+            width: 100%;
+            max-width: 800px;
+            margin: 20px auto;
+        }
+        #uploadedVideo {
+            width: 100%;
+            height: auto;
+        }
+        #resultsContainer {
+            background: rgba(255, 255, 255, 0.8);
+            padding: 2rem;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            max-width: 80%;
+            width: 600px;
+            margin: 20px auto;
+            display: none;
+        }
+        #analysisOutput {
+            display: none;
+            width: 100%;
+            height: 400px;
+            overflow-y: auto;
+            background-color: #f0f0f0;
+            border: 1px solid #ccc;
+            padding: 10px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+
+        .spinner-container {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .spinner {
+            position: relative;
+            width: 120px;  /* Increased from 60px */
+            height: 120px; /* Increased from 60px */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-radius: 50%;
+            margin-left: -150px; /* Adjusted from -75px */
+        }
+
+        .spinner span {
+            position: absolute;
+            top: 50%;
+            left: var(--left);
+            width: 70px;  /* Increased from 35px */
+            height: 14px; /* Increased from 7px */
+            background: #ffff;
+            animation: dominos 1s ease infinite;
+            box-shadow: 4px 4px 6px 0px black; /* Increased shadow */
+        }
+
+        .spinner span:nth-child(1) {
+            --left: 160px; /* Doubled from 80px */
+            animation-delay: 0.125s;
+        }
+
+        .spinner span:nth-child(2) {
+            --left: 140px; /* Doubled from 70px */
+            animation-delay: 0.3s;
+        }
+
+        .spinner span:nth-child(3) {
+            left: 120px; /* Doubled from 60px */
+            animation-delay: 0.425s;
+        }
+
+        .spinner span:nth-child(4) {
+            animation-delay: 0.54s;
+            left: 100px; /* Doubled from 50px */
+        }
+
+        .spinner span:nth-child(5) {
+            animation-delay: 0.665s;
+            left: 80px; /* Doubled from 40px */
+        }
+
+        .spinner span:nth-child(6) {
+            animation-delay: 0.79s;
+            left: 60px; /* Doubled from 30px */
+        }
+
+        .spinner span:nth-child(7) {
+            animation-delay: 0.915s;
+            left: 40px; /* Doubled from 20px */
+        }
+
+        .spinner span:nth-child(8) {
+            left: 20px; /* Doubled from 10px */
+        }
+
+        @keyframes dominos {
+            50% {
+                opacity: 0.7;
+            }
+
+            75% {
+                -webkit-transform: rotate(90deg);
+                transform: rotate(90deg);
+            }
+
+            80% {
+                opacity: 1;
+            }
+        }
+
+        #analysisOutput {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            z-index: 1001;
+        }
+    </style>
+</head>
+<body>
+    <video autoplay muted loop class="video-background">
+        <source src="/background.mp4" type="video/mp4">
+        Your browser does not support the video tag.
+    </video>
+    
+    <div class="content">
+        <h1>VEHICLE DETECTION SYSTEM</h1>
+        <div class="container" id="uploadContainer">
+            <form id="uploadForm" enctype="multipart/form-data">
+                <div class="upload-btn-wrapper">
+                    <button class="learn-more" type="button">
+                        <span class="circle" aria-hidden="true">
+                            <span class="icon arrow"></span>
+                        </span>
+                        <span class="button-text">Upload Video</span>
+                    </button>
+                    <input type="file" name="video" accept="video/*" />
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="spinner-container">
+        <div class="spinner">
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+    </div>
+
+    <script>
+        document.querySelector('input[type="file"]').addEventListener('change', function(e) {
+            var file = e.target.files[0];
+            if (file) {
+                var formData = new FormData();
+                formData.append('video', file);
+
+                document.querySelector('.content').style.display = 'none';
+                document.querySelector('.spinner-container').style.display = 'flex';
+
+                fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.videoPath) {
+                        // Keep the spinner visible
+                        console.log('Video uploaded and analysis started.');
+                    }
+                })
+                .catch((error) => {
+                    console.error('Error:', error);
+                    document.querySelector('.spinner-container').style.display = 'none';
+                    alert('Error uploading video: ' + error.message);
+                });
+            }
+        });
+    </script>
+</body>
+</html>

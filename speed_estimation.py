@@ -4,17 +4,22 @@ import cv2
 from scipy.optimize import linear_sum_assignment
 
 # Constants
-FRAME_RATE = 30  # Frames per second
+FRAME_RATE = 24  # Frames per second
 FRAME_TIME = 1 / FRAME_RATE
-HISTORY_SIZE = 30  # Number of recent positions to keep for each vehicle
-MAX_SPEED = 200  # Maximum speed in km/h
-MIN_DETECTION_FRAMES = 5  # Minimum number of frames a vehicle must be detected to estimate speed
-SPEED_SMOOTHING_FACTOR = 0.3  # Factor for exponential moving average
-MAX_TRACKING_DISTANCE = 100  # Maximum distance (in pixels) to associate detections between frames
+HISTORY_SIZE = 15  # Increased to get a better average
+MAX_SPEED = 150  # Increased to allow for higher speeds
+MIN_DETECTION_FRAMES = 5  # Increased to ensure more stable speed estimation
+SPEED_SMOOTHING_FACTOR = 0.3  # Reduced to make speed changes less abrupt
+MAX_TRACKING_DISTANCE = 100  # Reduced to avoid incorrect associations
+MIN_SPEED_THRESHOLD = 1  # Minimum speed to consider a vehicle as moving (km/h)
+MAX_SPEED_CHANGE = 10  # Maximum allowed speed change between frames (km/h)
+SPEED_MEMORY = 5  # Number of recent speed estimates to keep
 
 # These values need to be calibrated for your specific video
-DISTANCE_REAL_WORLD = 20  # meters, the real-world distance covered in your region of interest
+DISTANCE_REAL_WORLD = 30  # meters, the real-world distance covered in your region of interest
 PIXELS_PER_METER = None  # This will be calculated based on the calibration
+
+trackers = []
 
 class VehicleTracker:
     def __init__(self, vehicle_id, initial_position, initial_frame):
@@ -25,6 +30,8 @@ class VehicleTracker:
         self.last_position = initial_position
         self.last_frame = initial_frame
         self.lost_frames = 0
+        self.speed_history = deque(maxlen=SPEED_MEMORY)
+        self.is_moving = False
 
     def update_position(self, new_position, frame_number):
         self.positions.append((new_position, frame_number))
@@ -36,22 +43,41 @@ class VehicleTracker:
         if len(self.positions) < MIN_DETECTION_FRAMES:
             return 0
 
-        distances = []
-        time_diffs = []
+        total_distance = 0
+        total_time = 0
         for i in range(1, len(self.positions)):
             start_pos, start_frame = self.positions[i-1]
             end_pos, end_frame = self.positions[i]
             distance_pixels = np.linalg.norm(np.array(end_pos) - np.array(start_pos))
-            distances.append(distance_pixels / PIXELS_PER_METER)
-            time_diffs.append((end_frame - start_frame) * FRAME_TIME)
+            total_distance += distance_pixels / PIXELS_PER_METER
+            total_time += (end_frame - start_frame) * FRAME_TIME
 
-        if sum(time_diffs) > 0:
-            avg_speed = sum(distances) / sum(time_diffs) * 3.6  # Convert to km/h
+        if total_time > 0:
+            current_speed = (total_distance / total_time) * 3.6  # Convert to km/h
+            
+            # Apply smoothing and limit sudden changes
+            if self.speed_history:
+                prev_speed = self.speed_history[-1]
+                speed_change = min(max(current_speed - prev_speed, -MAX_SPEED_CHANGE), MAX_SPEED_CHANGE)
+                smoothed_speed = prev_speed + speed_change
+            else:
+                smoothed_speed = current_speed
+
+            self.speed_history.append(smoothed_speed)
+            
+            # Calculate average speed from recent history
+            avg_speed = sum(self.speed_history) / len(self.speed_history)
+            
+            # Determine if the vehicle is moving
+            if avg_speed > MIN_SPEED_THRESHOLD:
+                self.is_moving = True
+            elif self.is_moving and avg_speed < MIN_SPEED_THRESHOLD / 2:
+                self.is_moving = False
+
+            # Return either the average speed or 0 based on movement status
+            return round(avg_speed, 1) if self.is_moving else 0
         else:
-            avg_speed = 0
-
-        self.speed = SPEED_SMOOTHING_FACTOR * avg_speed + (1 - SPEED_SMOOTHING_FACTOR) * self.speed
-        return min(round(self.speed, 1), MAX_SPEED)
+            return 0
 
 def calibrate_speed_estimation(frame, roi_points):
     global PIXELS_PER_METER
@@ -97,20 +123,16 @@ def associate_detections_to_trackers(detections, trackers):
     return matches, np.array(unmatched_detections), np.array(unmatched_trackers)
 
 def estimate_speed(frame, vehicles, frame_number, roi_points):
-    global PIXELS_PER_METER
+    global PIXELS_PER_METER, trackers
     
     if PIXELS_PER_METER is None:
         calibrate_speed_estimation(frame, roi_points)
 
-    detections = np.array([[((v[0] + v[2]) / 2, (v[1] + v[3]) / 2)] for v in vehicles])
+    detections = np.array([[(v[0] + v[2]) / 2, (v[1] + v[3]) / 2] for v in vehicles])
     
     if frame_number == 0:
         trackers = [VehicleTracker(i, det, frame_number) for i, det in enumerate(detections)]
     else:
-        # Initialize trackers if it doesn't exist
-        if 'trackers' not in locals():
-            trackers = []
-
         matched, unmatched_dets, unmatched_trks = associate_detections_to_trackers(detections, trackers)
         
         # Update matched trackers
@@ -125,9 +147,9 @@ def estimate_speed(frame, vehicles, frame_number, roi_points):
         trackers = [t for i, t in enumerate(trackers) if i not in unmatched_trks]
 
     speeds = {}
-    for i, tracker in enumerate(trackers):
+    for tracker in trackers:
         speed = tracker.estimate_speed()
-        speeds[f"vehicle_{i}"] = speed
+        speeds[f"vehicle_{tracker.vehicle_id}"] = min(speed, MAX_SPEED)
 
     if speeds:
         print(f"Frame {frame_number}: Speeds: {speeds}")
