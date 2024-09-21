@@ -1,55 +1,90 @@
 import cv2
 import numpy as np
 from vehicle_detection import detect_vehicles
+import time
+import ssl
 from number_plate_recognition import recognize_number_plate
-from speed_estimation import estimate_speed
+from speed_estimation import estimate_speed, draw_speed_info, calibrate_speed_estimation
 from color_detection import detect_color
 
-def main():
-    video_path = '/Users/amit/Downloads/h1.mp4'
-    
-    # Estimate overall speed
-    avg_speed = estimate_speed(video_path)
-    if avg_speed is not None:
-        print(f"Average speed: {avg_speed:.2f} pixels per second")
-    else:
-        print("Failed to estimate overall speed")
+ssl._create_default_https_context = ssl._create_unverified_context
 
-    # Process video frame by frame
-    cap = cv2.VideoCapture(video_path)
+def process_video_realtime(input_path):
+    cap = cv2.VideoCapture(input_path)
     
-    while True:
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    frame_time = 1 / fps
+    frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    frame_number = 0
+
+    # Define region of interest for speed estimation
+    roi_start = int(frame_height * 0.5)  # Start from middle of the frame
+    roi_end = int(frame_height * 0.8)    # End at 80% of the frame height
+    roi_points = [(0, roi_start), (frame_width, roi_end)]
+
+    ret, first_frame = cap.read()
+    if not ret:
+        print("Failed to read the video")
+        return
+    calibrate_speed_estimation(first_frame, roi_points)
+
+    trackers = []
+
+    while cap.isOpened():
+        start_time = time.time()
         ret, frame = cap.read()
         if not ret:
             break
 
-        # Detect vehicles
         vehicles = detect_vehicles(frame)
 
-        for vehicle in vehicles:
-            print(f"Vehicle shape: {vehicle.shape if vehicle is not None else 'None'}")
-            print(f"Vehicle type: {type(vehicle)}")
-            
-            if vehicle is None or vehicle.size == 0:
-                print("Error: Vehicle image is empty or None")
-                return
-            
-            # Extract number plate
-            number_plate = recognize_number_plate(vehicle)
+        speeds, trackers = estimate_speed(frame, vehicles, frame_number, roi_points)
 
-            # Detect color
-            color = detect_color(vehicle)
+        # Draw ROI lines
+        cv2.line(frame, (0, roi_start), (frame_width, roi_start), (0, 255, 0), 2)
+        cv2.line(frame, (0, roi_end), (frame_width, roi_end), (0, 255, 0), 2)
 
-            # Display results
-            cv2.imshow('Vehicle', vehicle)
-            if number_plate:
-                print(f'Number Plate: {number_plate}, Color: {color}')
+        for i, vehicle in enumerate(vehicles):
+            x1, y1, x2, y2, conf, cls = vehicle
 
-        if cv2.waitKey(1) & 0xFF == ord('q'):
+            cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
+
+            vehicle_img = frame[int(y1):int(y2), int(x1):int(x2)]
+            color = detect_color(vehicle_img)
+
+            plate_number, plate_roi = recognize_number_plate(frame, vehicle)
+
+            if plate_roi is not None:
+                px1, py1, px2, py2 = plate_roi
+                cv2.rectangle(frame, (int(px1), int(py1)), (int(px2), int(py2)), (255, 0, 0), 2)
+
+            class_name = get_class_name(cls)
+            info = f"{class_name}: {conf:.2f}, Color: {color}"
+            cv2.putText(frame, info, (int(x1), int(y1)-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255), 2)
+            cv2.putText(frame, f"Plate: {plate_number}", (int(x1), int(y2)+20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255), 2)
+
+        frame = draw_speed_info(frame, vehicles, speeds)
+
+        cv2.imshow('Vehicle Detection', frame)
+
+        process_time = time.time() - start_time
+        wait_time = max(1, int((frame_time - process_time) * 1000))
+        if cv2.waitKey(wait_time) & 0xFF == ord('q'):
             break
+
+        frame_number += 1
 
     cap.release()
     cv2.destroyAllWindows()
 
+    print("Video processing complete.")
+
+def get_class_name(class_id):
+    class_names = {2: 'Car', 3: 'Motorbike', 5: 'Bus', 7: 'Truck'}
+    return class_names.get(class_id, 'Unknown')
+
 if __name__ == '__main__':
-    main()
+    input_video_path = '/Users/amit/Downloads/Traffic IP Camera video.mp4'
+    process_video_realtime(input_video_path)
